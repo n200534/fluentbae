@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # Redis service for memory storage and vector database
+  redis:
+    image: redis:7-alpine
+    container_name: fluentbae-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # FluentBae application
+  fluentbae:
+    build: .
+    container_name: fluentbae-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - NEXT_PUBLIC_APP_NAME=FluentBae
+      - NEXT_PUBLIC_APP_DESCRIPTION=Your romantic AI chat partner with emotion memory
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Redis Commander for Redis management (development only)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: fluentbae-redis-commander
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      - redis
+    restart: unless-stopped
+    profiles:
+      - dev
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: fluentbae-network
+

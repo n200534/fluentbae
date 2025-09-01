@@ -1,0 +1,359 @@
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { BufferMemory, ConversationSummaryMemory } from 'langchain/memory';
+import { PromptTemplate } from '@langchain/core/prompts';
+import { redisUtils } from './redis';
+import { Emotion, Memory, MemoryType } from '@/types';
+
+export class LangChainMemoryManager {
+  private userId: string;
+  private memory: BufferMemory;
+  private summaryMemory: ConversationSummaryMemory;
+  private model: ChatGoogleGenerativeAI;
+
+  constructor(userId: string, apiKey: string) {
+    this.userId = userId;
+    
+    // Initialize Google Generative AI model
+    this.model = new ChatGoogleGenerativeAI({
+      model: 'gemini-1.5-flash',
+      maxOutputTokens: 2048,
+      temperature: 0.7,
+      apiKey,
+    });
+
+    // Initialize conversation memory
+    this.memory = new BufferMemory({
+      returnMessages: true,
+      memoryKey: 'history',
+      inputKey: 'input',
+    });
+
+    // Initialize summary memory for long-term context
+    this.summaryMemory = new ConversationSummaryMemory({
+      llm: this.model,
+      memoryKey: 'chat_history',
+      inputKey: 'input',
+      returnMessages: true,
+    });
+
+    // Load existing conversation history
+    this.loadConversationHistory();
+  }
+
+  // Load existing conversation history from Redis
+  private async loadConversationHistory(): Promise<void> {
+    try {
+      const chatHistory = await redisUtils.getChatHistory(this.userId, 50);
+      
+      // Add recent messages to memory
+      for (const message of chatHistory.reverse()) {
+        if (message.role === 'user') {
+          await this.memory.saveContext(
+            { input: message.content },
+            { output: '' }
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error loading conversation history:', error);
+    }
+  }
+
+  // Get conversation context for AI response
+  async getConversationContext(userMessage: string): Promise<{
+    history: string;
+    summary: string;
+    relevantMemories: Memory[];
+    currentMood: Emotion;
+  }> {
+    try {
+      // Get conversation history
+      const history = await this.memory.loadMemoryVariables({});
+      const chatHistory = history.history || [];
+
+      // Get conversation summary
+      const summaryData = await this.summaryMemory.loadMemoryVariables({});
+      const summary = summaryData.chat_history || 'No previous conversation summary.';
+
+      // Get relevant memories from Redis
+      const relevantMemories = await this.getRelevantMemories(userMessage);
+
+      // Analyze current mood
+      const currentMood = await this.analyzeEmotion(userMessage);
+
+      return {
+        history: chatHistory.join('\n'),
+        summary,
+        relevantMemories,
+        currentMood,
+      };
+    } catch (error) {
+      console.error('Error getting conversation context:', error);
+      return {
+        history: '',
+        summary: 'No conversation history available.',
+        relevantMemories: [],
+        currentMood: { primary: 'neutral', intensity: 0.5 },
+      };
+    }
+  }
+
+  // Save conversation context
+  async saveConversationContext(
+    userMessage: string,
+    aiResponse: string,
+    emotion: Emotion
+  ): Promise<void> {
+    try {
+      // Save to buffer memory
+      await this.memory.saveContext(
+        { input: userMessage },
+        { output: aiResponse }
+      );
+
+      // Save to summary memory
+      await this.summaryMemory.saveContext(
+        { input: userMessage },
+        { output: aiResponse }
+      );
+
+      // Create memory entry if important
+      await this.createMemoryIfImportant(userMessage, emotion);
+
+    } catch (error) {
+      console.error('Error saving conversation context:', error);
+    }
+  }
+
+  // Get relevant memories using LangChain
+  private async getRelevantMemories(query: string): Promise<Memory[]> {
+    try {
+      const allMemories = await redisUtils.getMemories(this.userId, 100);
+      
+      if (allMemories.length === 0) return [];
+
+      // Create a prompt for memory retrieval
+      const memoryPrompt = PromptTemplate.fromTemplate(`
+        Given the user's current message: "{query}"
+        
+        And these past memories:
+        {memories}
+        
+        Return the 3 most relevant memories (by ID) that should be referenced in the response.
+        Consider emotional context, topics, and user preferences.
+        
+        Return only the memory IDs separated by commas, no other text.
+      `);
+
+      const memoriesText = allMemories
+        .map(m => `ID: ${m.id}, Content: ${m.content}, Type: ${m.type}, Importance: ${m.importance}`)
+        .join('\n');
+
+      const chain = memoryPrompt.pipe(this.model);
+      const result = await chain.invoke({
+        query,
+        memories: memoriesText,
+      });
+
+      const relevantIds = result.content.toString().split(',').map(id => id.trim());
+      return allMemories.filter(memory => relevantIds.includes(memory.id)).slice(0, 3);
+
+    } catch (error) {
+      console.error('Error getting relevant memories:', error);
+      return [];
+    }
+  }
+
+  // Create memory if message is important
+  private async createMemoryIfImportant(message: string, emotion: Emotion): Promise<void> {
+    try {
+      const shouldCreate = this.shouldCreateMemory(message, emotion);
+      if (!shouldCreate) return;
+
+      const memoryType = this.determineMemoryType(message);
+      const importance = await this.calculateImportance(message, emotion);
+      const tags = await this.extractTags(message);
+
+      const memory: Memory = {
+        id: crypto.randomUUID(),
+        userId: this.userId,
+        content: message,
+        type: memoryType,
+        importance,
+        emotion,
+        tags,
+        createdAt: new Date(),
+        lastAccessedAt: new Date(),
+      };
+
+      await redisUtils.addMemory(this.userId, memory);
+    } catch (error) {
+      console.error('Error creating memory:', error);
+    }
+  }
+
+  // Analyze emotion using LangChain
+  private async analyzeEmotion(message: string): Promise<Emotion> {
+    try {
+      const emotionPrompt = PromptTemplate.fromTemplate(`
+        Analyze the emotional content of this message and return ONLY a JSON object:
+        {{
+          "primary": "emotion_type",
+          "intensity": 0.0-1.0,
+          "secondary": "optional_secondary_emotion",
+          "context": "brief_context_description"
+        }}
+
+        Available emotion types: joy, love, excitement, contentment, gratitude, sadness, anger, fear, anxiety, loneliness, frustration, disappointment, neutral, curious, surprised, confused
+
+        Message: "{message}"
+
+        Return only the JSON object, no markdown formatting.
+      `);
+
+      const chain = emotionPrompt.pipe(this.model);
+      const result = await chain.invoke({ message });
+
+      const text = result.content.toString().trim();
+      let cleanText = text;
+      
+      // Clean markdown if present
+      if (cleanText.startsWith('```json')) {
+        cleanText = cleanText.replace(/```json\s*/, '').replace(/\s*```/, '');
+      } else if (cleanText.startsWith('```')) {
+        cleanText = cleanText.replace(/```\s*/, '').replace(/\s*```/, '');
+      }
+
+      const emotionData = JSON.parse(cleanText);
+      return {
+        primary: emotionData.primary || 'neutral',
+        intensity: Math.max(0, Math.min(1, emotionData.intensity || 0.5)),
+        secondary: emotionData.secondary,
+        context: emotionData.context,
+      };
+    } catch (error) {
+      console.error('Error analyzing emotion:', error);
+      return { primary: 'neutral', intensity: 0.5 };
+    }
+  }
+
+  // Determine if message should be stored as memory
+  private shouldCreateMemory(message: string, emotion: Emotion): boolean {
+    if (message.length < 10) return false;
+    if (emotion.intensity > 0.7) return true;
+    
+    const importantKeywords = [
+      'remember', 'important', 'special', 'love', 'hate', 'never',
+      'always', 'dream', 'goal', 'wish', 'fear', 'worry'
+    ];
+    
+    const messageLower = message.toLowerCase();
+    if (importantKeywords.some(keyword => messageLower.includes(keyword))) {
+      return true;
+    }
+    
+    if (message.includes('?')) return true;
+    if (message.length > 50) return true;
+    
+    return false;
+  }
+
+  // Determine memory type
+  private determineMemoryType(message: string): MemoryType {
+    const messageLower = message.toLowerCase();
+    
+    if (messageLower.includes('gift') || messageLower.includes('present')) return 'gift';
+    if (messageLower.includes('dream') || messageLower.includes('wish') || messageLower.includes('goal')) return 'dream';
+    if (messageLower.includes('achievement') || messageLower.includes('accomplished') || messageLower.includes('proud')) return 'achievement';
+    if (messageLower.includes('worried') || messageLower.includes('concerned') || messageLower.includes('problem')) return 'concern';
+    if (messageLower.includes('birthday') || messageLower.includes('anniversary') || messageLower.includes('event')) return 'event';
+    if (messageLower.includes('like') || messageLower.includes('dislike') || messageLower.includes('prefer')) return 'preference';
+    
+    return 'conversation';
+  }
+
+  // Calculate memory importance
+  private async calculateImportance(message: string, emotion: Emotion): Promise<number> {
+    let importance = 0.5;
+
+    if (emotion) {
+      importance += emotion.intensity * 0.3;
+      
+      if (['love', 'joy', 'excitement', 'gratitude'].includes(emotion.primary)) {
+        importance += 0.2;
+      }
+      if (['sadness', 'anger', 'fear', 'anxiety'].includes(emotion.primary)) {
+        importance += 0.15;
+      }
+    }
+
+    const importantKeywords = [
+      'love', 'hate', 'important', 'special', 'remember', 'never forget',
+      'birthday', 'anniversary', 'promotion', 'achievement', 'goal',
+      'dream', 'wish', 'fear', 'worry', 'excited', 'proud'
+    ];
+
+    const contentLower = message.toLowerCase();
+    const keywordMatches = importantKeywords.filter(keyword => 
+      contentLower.includes(keyword)
+    ).length;
+
+    importance += keywordMatches * 0.1;
+
+    if (message.length > 100) importance += 0.1;
+    if (message.length > 200) importance += 0.1;
+    if (message.includes('?')) importance += 0.05;
+
+    return Math.min(1, Math.max(0, importance));
+  }
+
+  // Extract tags using LangChain
+  private async extractTags(message: string): Promise<string[]> {
+    try {
+      const tagPrompt = PromptTemplate.fromTemplate(`
+        Extract 3-5 relevant tags from this message that would help categorize and retrieve this memory later.
+        
+        Message: "{message}"
+        
+        Return only the tags separated by commas, no other text.
+        Examples: family, work, travel, health, relationships, hobbies, etc.
+      `);
+
+      const chain = tagPrompt.pipe(this.model);
+      const result = await chain.invoke({ message });
+
+      const tags = result.content.toString().trim().split(',').map(tag => tag.trim());
+      return tags.filter(tag => tag.length > 0).slice(0, 5);
+    } catch (error) {
+      console.error('Error extracting tags:', error);
+      return ['general'];
+    }
+  }
+
+  // Get conversation summary
+  async getConversationSummary(): Promise<string> {
+    try {
+      const summaryData = await this.summaryMemory.loadMemoryVariables({});
+      return summaryData.chat_history || 'No conversation summary available.';
+    } catch (error) {
+      console.error('Error getting conversation summary:', error);
+      return 'No conversation summary available.';
+    }
+  }
+
+  // Clear conversation memory
+  async clearMemory(): Promise<void> {
+    try {
+      await this.memory.clear();
+      await this.summaryMemory.clear();
+    } catch (error) {
+      console.error('Error clearing memory:', error);
+    }
+  }
+}
+
+// Utility functions
+export const langChainMemoryUtils = {
+  // Create LangChain memory manager for user
+  createManager: (userId: string, apiKey: string) => new LangChainMemoryManager(userId, apiKey),
+};
