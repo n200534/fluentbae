@@ -157,6 +157,8 @@ export interface ConversationContext {
   activeTopics: string[];
   relationshipStage: 'new' | 'developing' | 'established' | 'deep';
   lastInteraction: Date;
+  conversationHistory?: string;
+  conversationSummary?: string;
 }
 
 // API Response Types

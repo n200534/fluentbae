@@ -67,10 +67,9 @@ export class LangChainMemoryManager {
     currentMood: Emotion;
   }> {
     try {
-      // Get conversation history
-      const history = await this.memory.loadMemoryVariables({});
-      const chatHistory = history.history || [];
-
+      // Get conversation history from Redis (more reliable than LangChain buffer)
+      const chatHistory = await redisUtils.getChatHistory(this.userId, 20);
+      
       // Get conversation summary
       const summaryData = await this.summaryMemory.loadMemoryVariables({});
       const summary = summaryData.chat_history || 'No previous conversation summary.';
@@ -81,8 +80,14 @@ export class LangChainMemoryManager {
       // Analyze current mood
       const currentMood = await this.analyzeEmotion(userMessage);
 
+      // Create a rich conversation history
+      const history = chatHistory
+        .filter(msg => msg.role === 'user' || msg.role === 'assistant')
+        .map(msg => `${msg.role === 'user' ? 'User' : 'FluentBae'}: ${msg.content}`)
+        .join('\n');
+
       return {
-        history: chatHistory.join('\n'),
+        history,
         summary,
         relevantMemories,
         currentMood,
@@ -132,31 +137,40 @@ export class LangChainMemoryManager {
       
       if (allMemories.length === 0) return [];
 
-      // Create a prompt for memory retrieval
-      const memoryPrompt = PromptTemplate.fromTemplate(`
-        Given the user's current message: "{query}"
+      // Simple keyword-based relevance scoring for fallback
+      const queryLower = query.toLowerCase();
+      const scoredMemories = allMemories.map(memory => {
+        const contentLower = memory.content.toLowerCase();
+        let score = 0;
         
-        And these past memories:
-        {memories}
+        // Score based on keyword matches
+        const words = queryLower.split(' ');
+        words.forEach(word => {
+          if (contentLower.includes(word) && word.length > 2) {
+            score += 1;
+          }
+        });
         
-        Return the 3 most relevant memories (by ID) that should be referenced in the response.
-        Consider emotional context, topics, and user preferences.
+        // Score based on emotion similarity
+        if (memory.emotion && memory.emotion.primary !== 'neutral') {
+          score += 0.5;
+        }
         
-        Return only the memory IDs separated by commas, no other text.
-      `);
-
-      const memoriesText = allMemories
-        .map(m => `ID: ${m.id}, Content: ${m.content}, Type: ${m.type}, Importance: ${m.importance}`)
-        .join('\n');
-
-      const chain = memoryPrompt.pipe(this.model);
-      const result = await chain.invoke({
-        query,
-        memories: memoriesText,
+        // Score based on importance
+        score += memory.importance;
+        
+        // Score based on recency (more recent = higher score)
+        const daysSinceCreation = (Date.now() - memory.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+        score += Math.max(0, 1 - daysSinceCreation / 30); // Decay over 30 days
+        
+        return { memory, score };
       });
 
-      const relevantIds = result.content.toString().split(',').map(id => id.trim());
-      return allMemories.filter(memory => relevantIds.includes(memory.id)).slice(0, 3);
+      // Sort by score and return top 5
+      return scoredMemories
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5)
+        .map(item => item.memory);
 
     } catch (error) {
       console.error('Error getting relevant memories:', error);

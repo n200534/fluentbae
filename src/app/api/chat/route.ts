@@ -48,9 +48,16 @@ export async function POST(request: NextRequest) {
       lastInteraction: new Date()
     };
 
+    // Add conversation history to context
+    const enhancedContext = {
+      ...context,
+      conversationHistory: conversationContext.history,
+      conversationSummary: conversationContext.summary
+    };
+
     // Generate AI response
     const ai = aiUtils.createAI(userId);
-    const response = await ai.generateResponse(message, context);
+    const response = await ai.generateResponse(message, enhancedContext);
 
     // Create AI message
     const aiMessage: ChatMessage = {

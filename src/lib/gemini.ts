@@ -159,12 +159,35 @@ export class GeminiAI {
       const systemPrompt = this.buildSystemPrompt(context, language);
       const suggestions = await this.generateSuggestions(message, context, language);
 
+      // Enhanced prompt with conversation history
       const prompt = `
         ${systemPrompt}
         
-        User message: "${message}"
+        RECENT CONVERSATION HISTORY:
+        ${context.conversationHistory || 'No recent conversation history available'}
         
-        Respond in the same language as the user's message. Be extremely friendly, warm, and lovable.
+        CONVERSATION SUMMARY:
+        ${context.conversationSummary || 'No conversation summary available'}
+        
+        RELEVANT MEMORIES:
+        ${context.recentMemories.length > 0 ? 
+          context.recentMemories.map(memory => 
+            `- ${memory.content} (${memory.type}, importance: ${Math.round(memory.importance * 100)}%)`
+          ).join('\n') : 
+          '- No specific memories to reference'
+        }
+        
+        CURRENT USER MESSAGE: "${message}"
+        
+        IMPORTANT INSTRUCTIONS:
+        1. Respond in the same language as the user's message
+        2. Reference specific details from the conversation history to show you remember them
+        3. Ask follow-up questions that relate to their past experiences
+        4. Be extremely friendly, warm, and lovable
+        5. Show genuine care and interest in their life
+        6. Use the conversation history to provide personalized responses
+        7. If the user mentions something from previous conversations, acknowledge it
+        8. Build on previous topics and show continuity in the conversation
       `;
 
       const result = await this.model.generateContent(prompt);
