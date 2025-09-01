@@ -6,8 +6,11 @@ export class GeminiAI {
   private userId: string;
   private requestCount: number = 0;
   private lastRequestTime: number = 0;
-  private readonly RATE_LIMIT_DELAY = 1000; // 1 second between requests
-  private readonly MAX_REQUESTS_PER_MINUTE = 10;
+  private readonly RATE_LIMIT_DELAY = 2000; // Increased to 2 seconds between requests
+  private readonly MAX_REQUESTS_PER_MINUTE = 5; // Reduced from 10 to 5
+  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
+  private emotionCache: Map<string, { emotion: Emotion; timestamp: number }> = new Map();
+  private languageCache: Map<string, { language: string; timestamp: number }> = new Map();
 
   constructor(userId: string, apiKey: string) {
     this.userId = userId;
@@ -15,14 +18,28 @@ export class GeminiAI {
     this.model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
   }
 
-  // Rate limiting helper
+  // Rate limiting helper with exponential backoff
   private async checkRateLimit(): Promise<void> {
     const now = Date.now();
-    if (now - this.lastRequestTime < this.RATE_LIMIT_DELAY) {
-      await new Promise(resolve => setTimeout(resolve, this.RATE_LIMIT_DELAY));
+    const timeSinceLastRequest = now - this.lastRequestTime;
+    
+    // Exponential backoff if we're hitting limits
+    const backoffDelay = Math.min(
+      this.RATE_LIMIT_DELAY * Math.pow(2, Math.floor(this.requestCount / 10)),
+      10000 // Max 10 seconds
+    );
+    
+    if (timeSinceLastRequest < backoffDelay) {
+      await new Promise(resolve => setTimeout(resolve, backoffDelay - timeSinceLastRequest));
     }
+    
     this.lastRequestTime = now;
     this.requestCount++;
+  }
+
+  // Cache helper
+  private isCacheValid(timestamp: number): boolean {
+    return Date.now() - timestamp < this.CACHE_DURATION;
   }
 
   // Fallback emotion analysis
@@ -73,8 +90,22 @@ export class GeminiAI {
     return 'english';
   }
 
-  // Analyze emotion with fallback
+  // Analyze emotion with caching
   async analyzeEmotion(message: string): Promise<Emotion> {
+    // Check cache first
+    const cacheKey = message.toLowerCase().trim();
+    const cached = this.emotionCache.get(cacheKey);
+    if (cached && this.isCacheValid(cached.timestamp)) {
+      return cached.emotion;
+    }
+
+    // Use fallback for short messages to save API calls
+    if (message.length < 20) {
+      const emotion = this.fallbackEmotionAnalysis(message);
+      this.emotionCache.set(cacheKey, { emotion, timestamp: Date.now() });
+      return emotion;
+    }
+
     try {
       await this.checkRateLimit();
       
@@ -107,20 +138,40 @@ export class GeminiAI {
       }
       
       const emotionData = JSON.parse(cleanText);
-      return {
+      const emotion = {
         primary: emotionData.primary || 'neutral',
         intensity: Math.max(0, Math.min(1, emotionData.intensity || 0.5)),
         secondary: emotionData.secondary,
         context: emotionData.context,
       };
+
+      // Cache the result
+      this.emotionCache.set(cacheKey, { emotion, timestamp: Date.now() });
+      return emotion;
     } catch {
       console.warn('API rate limit reached, using fallback emotion analysis');
-      return this.fallbackEmotionAnalysis(message);
+      const emotion = this.fallbackEmotionAnalysis(message);
+      this.emotionCache.set(cacheKey, { emotion, timestamp: Date.now() });
+      return emotion;
     }
   }
 
-  // Detect language with fallback
+  // Detect language with caching
   async detectLanguage(message: string): Promise<string> {
+    // Check cache first
+    const cacheKey = message.toLowerCase().trim();
+    const cached = this.languageCache.get(cacheKey);
+    if (cached && this.isCacheValid(cached.timestamp)) {
+      return cached.language;
+    }
+
+    // Use fallback for short messages to save API calls
+    if (message.length < 15) {
+      const language = this.fallbackLanguageDetection(message);
+      this.languageCache.set(cacheKey, { language, timestamp: Date.now() });
+      return language;
+    }
+
     try {
       await this.checkRateLimit();
       
@@ -143,21 +194,33 @@ export class GeminiAI {
         cleanText = cleanText.replace(/```\s*/, '').replace(/\s*```/, '');
       }
       
+      // Cache the result
+      this.languageCache.set(cacheKey, { language: cleanText, timestamp: Date.now() });
       return cleanText;
     } catch {
       console.warn('API rate limit reached, using fallback language detection');
-      return this.fallbackLanguageDetection(message);
+      const language = this.fallbackLanguageDetection(message);
+      this.languageCache.set(cacheKey, { language, timestamp: Date.now() });
+      return language;
     }
   }
 
-  // Generate response with fallback
+  // Generate response with optimized API usage
   async generateResponse(message: string, context: ConversationContext): Promise<ChatResponse> {
     try {
       await this.checkRateLimit();
       
-      const language = await this.detectLanguage(message);
+      // Use fallback language detection for short messages
+      const language = message.length < 15 ? 
+        this.fallbackLanguageDetection(message) : 
+        await this.detectLanguage(message);
+      
       const systemPrompt = this.buildSystemPrompt(context, language);
-      const suggestions = await this.generateSuggestions(message, context, language);
+      
+      // Use fallback suggestions for short messages
+      const suggestions = message.length < 30 ? 
+        this.getDefaultSuggestions(language) : 
+        await this.generateSuggestions(message, context, language);
 
       // Enhanced prompt with conversation history
       const prompt = `
@@ -194,8 +257,8 @@ export class GeminiAI {
       const response = await result.response;
       const aiMessage = response.text().trim();
 
-      // Analyze emotion from AI response
-      const emotion = await this.analyzeEmotion(aiMessage);
+      // Use fallback emotion analysis for AI response to save API calls
+      const emotion = this.fallbackEmotionAnalysis(aiMessage);
 
       return {
         message: aiMessage,
@@ -342,7 +405,7 @@ Remember: You're building a genuine emotional connection, not just providing inf
         cleanText = cleanText.replace(/```\s*/, '').replace(/\s*```/, '');
       }
       
-             return cleanText.split('\n').filter((s: string) => s.trim().length > 0).slice(0, 3);
+      return cleanText.split('\n').filter((s: string) => s.trim().length > 0).slice(0, 3);
     } catch {
       console.warn('API rate limit reached, using fallback suggestions');
       return this.getDefaultSuggestions(language);
@@ -371,7 +434,7 @@ Remember: You're building a genuine emotional connection, not just providing inf
     return suggestions[language] || suggestions.english;
   }
 
-  // Generate gift suggestions
+  // Generate gift suggestions (only when explicitly needed)
   async generateGiftSuggestions(occasion: string, userPreferences: Record<string, unknown>): Promise<GiftSuggestion[]> {
     try {
       await this.checkRateLimit();
@@ -415,31 +478,45 @@ Remember: You're building a genuine emotional connection, not just providing inf
     const budget = userPreferences.budget as { min: number; max: number } || { min: 10, max: 100 };
 
     return [
-             {
-         name: "Personalized Photo Frame",
-         description: "A beautiful frame with your favorite memories together",
-         category: "personal",
-         estimatedPrice: Math.min(budget.max, 25),
-         reasoning: "Shows thoughtfulness and preserves special moments",
-         confidence: 0.8
-       },
-       {
-         name: "Custom Jewelry",
-         description: "A piece of jewelry with personal meaning",
-         category: "jewelry",
-         estimatedPrice: Math.min(budget.max, 50),
-         reasoning: "Timeless and meaningful gift",
-         confidence: 0.7
-       },
-       {
-         name: "Experience Gift",
-         description: "A special outing or activity you can enjoy together",
-         category: "experience",
-         estimatedPrice: Math.min(budget.max, 75),
-         reasoning: "Creates new memories and shared experiences",
-         confidence: 0.9
-       }
+      {
+        name: "Personalized Photo Frame",
+        description: "A beautiful frame with your favorite memories together",
+        category: "personal",
+        estimatedPrice: Math.min(budget.max, 25),
+        reasoning: "Shows thoughtfulness and preserves special moments",
+        confidence: 0.8
+      },
+      {
+        name: "Custom Jewelry",
+        description: "A piece of jewelry with personal meaning",
+        category: "jewelry",
+        estimatedPrice: Math.min(budget.max, 50),
+        reasoning: "Timeless and meaningful gift",
+        confidence: 0.7
+      },
+      {
+        name: "Experience Gift",
+        description: "A special outing or activity you can enjoy together",
+        category: "experience",
+        estimatedPrice: Math.min(budget.max, 75),
+        reasoning: "Creates new memories and shared experiences",
+        confidence: 0.9
+      }
     ];
+  }
+
+  // Clear caches (useful for testing)
+  clearCaches(): void {
+    this.emotionCache.clear();
+    this.languageCache.clear();
+  }
+
+  // Get cache statistics
+  getCacheStats(): { emotionCacheSize: number; languageCacheSize: number } {
+    return {
+      emotionCacheSize: this.emotionCache.size,
+      languageCacheSize: this.languageCache.size
+    };
   }
 }
 

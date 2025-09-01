@@ -206,8 +206,13 @@ export class LangChainMemoryManager {
     }
   }
 
-  // Analyze emotion using LangChain
+  // Analyze emotion using LangChain (with fallback for short messages)
   private async analyzeEmotion(message: string): Promise<Emotion> {
+    // Use fallback for short messages to save API calls
+    if (message.length < 20) {
+      return this.fallbackEmotionAnalysis(message);
+    }
+
     try {
       const emotionPrompt = PromptTemplate.fromTemplate(`
         Analyze the emotional content of this message and return ONLY a JSON object:
@@ -247,8 +252,34 @@ export class LangChainMemoryManager {
       };
     } catch (error) {
       console.error('Error analyzing emotion:', error);
-      return { primary: 'neutral', intensity: 0.5 };
+      return this.fallbackEmotionAnalysis(message);
     }
+  }
+
+  // Fallback emotion analysis
+  private fallbackEmotionAnalysis(message: string): Emotion {
+    const messageLower = message.toLowerCase();
+    
+    if (messageLower.includes('love') || messageLower.includes('❤️') || messageLower.includes('💕')) {
+      return { primary: 'love', intensity: 0.8 };
+    }
+    if (messageLower.includes('happy') || messageLower.includes('😊') || messageLower.includes('joy')) {
+      return { primary: 'joy', intensity: 0.7 };
+    }
+    if (messageLower.includes('sad') || messageLower.includes('😢') || messageLower.includes('cry')) {
+      return { primary: 'sadness', intensity: 0.6 };
+    }
+    if (messageLower.includes('angry') || messageLower.includes('😠') || messageLower.includes('mad')) {
+      return { primary: 'anger', intensity: 0.7 };
+    }
+    if (messageLower.includes('worried') || messageLower.includes('😰') || messageLower.includes('anxious')) {
+      return { primary: 'anxiety', intensity: 0.6 };
+    }
+    if (messageLower.includes('excited') || messageLower.includes('🤩') || messageLower.includes('thrilled')) {
+      return { primary: 'excitement', intensity: 0.8 };
+    }
+    
+    return { primary: 'neutral', intensity: 0.5 };
   }
 
   // Determine if message should be stored as memory
@@ -321,8 +352,13 @@ export class LangChainMemoryManager {
     return Math.min(1, Math.max(0, importance));
   }
 
-  // Extract tags using LangChain
+  // Extract tags using LangChain (with fallback for short messages)
   private async extractTags(message: string): Promise<string[]> {
+    // Use fallback for short messages to save API calls
+    if (message.length < 30) {
+      return this.fallbackTagExtraction(message);
+    }
+
     try {
       const tagPrompt = PromptTemplate.fromTemplate(`
         Extract 3-5 relevant tags from this message that would help categorize and retrieve this memory later.
@@ -340,8 +376,42 @@ export class LangChainMemoryManager {
       return tags.filter(tag => tag.length > 0).slice(0, 5);
     } catch (error) {
       console.error('Error extracting tags:', error);
-      return ['general'];
+      return this.fallbackTagExtraction(message);
     }
+  }
+
+  // Fallback tag extraction
+  private fallbackTagExtraction(message: string): string[] {
+    const messageLower = message.toLowerCase();
+    const tags: string[] = [];
+    
+    // Simple keyword-based tag extraction
+    if (messageLower.includes('family') || messageLower.includes('mom') || messageLower.includes('dad')) {
+      tags.push('family');
+    }
+    if (messageLower.includes('work') || messageLower.includes('job') || messageLower.includes('career')) {
+      tags.push('work');
+    }
+    if (messageLower.includes('love') || messageLower.includes('relationship') || messageLower.includes('romantic')) {
+      tags.push('relationships');
+    }
+    if (messageLower.includes('health') || messageLower.includes('sick') || messageLower.includes('doctor')) {
+      tags.push('health');
+    }
+    if (messageLower.includes('food') || messageLower.includes('eat') || messageLower.includes('restaurant')) {
+      tags.push('food');
+    }
+    if (messageLower.includes('travel') || messageLower.includes('trip') || messageLower.includes('vacation')) {
+      tags.push('travel');
+    }
+    if (messageLower.includes('hobby') || messageLower.includes('interest') || messageLower.includes('fun')) {
+      tags.push('hobbies');
+    }
+    if (messageLower.includes('dream') || messageLower.includes('goal') || messageLower.includes('future')) {
+      tags.push('dreams');
+    }
+    
+    return tags.length > 0 ? tags : ['general'];
   }
 
   // Get conversation summary
