@@ -4,7 +4,7 @@ services:
   # Redis service for memory storage and vector database
   redis:
     image: redis:7-alpine
-    container_name: fluentbae-redis
+    container_name: babyai-redis
     ports:
       - "6379:6379"
     volumes:
@@ -17,18 +17,18 @@ services:
       timeout: 10s
       retries: 3
 
-  # FluentBae application
-  fluentbae:
+  # BabyAI application
+  babyai:
     build: .
-    container_name: fluentbae-app
+    container_name: babyai-app
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
       - REDIS_URL=redis://redis:6379
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - NEXT_PUBLIC_APP_NAME=FluentBae
-      - NEXT_PUBLIC_APP_DESCRIPTION=Your romantic AI chat partner with emotion memory
+      - NEXT_PUBLIC_APP_NAME=BabyAI
+      - NEXT_PUBLIC_APP_DESCRIPTION=Your sweet AI chat partner with emotion memory
     depends_on:
       redis:
         condition: service_healthy
@@ -43,7 +43,7 @@ services:
   # Optional: Redis Commander for Redis management (development only)
   redis-commander:
     image: rediscommander/redis-commander:latest
-    container_name: fluentbae-redis-commander
+    container_name: babyai-redis-commander
     ports:
       - "8081:8081"
     environment:
@@ -60,5 +60,5 @@ volumes:
 
 networks:
   default:
-    name: fluentbae-network
+    name: babyai-network
 

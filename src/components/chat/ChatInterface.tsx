@@ -124,7 +124,7 @@ export function ChatInterface({
           </motion.div>
           <div>
             <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent">
-              FluentBae
+              BabyAI
             </h1>
             <div className="flex items-center space-x-2">
               <motion.div
@@ -143,9 +143,9 @@ export function ChatInterface({
         </div>
         
         <div className="flex items-center space-x-3">
-          <div className="text-sm text-pink-700 dark:text-pink-300 hidden sm:block font-medium">
-            Your sweet AI companion 💖
-          </div>
+                     <div className="text-sm text-pink-700 dark:text-pink-300 hidden sm:block font-medium">
+             Your sweet BabyAI companion 💖
+           </div>
           
           <div className="flex items-center space-x-2">
             <motion.button
@@ -237,8 +237,8 @@ export function ChatInterface({
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5 }}
             >
-              I&apos;m FluentBae, your adorable AI companion! I&apos;m here to chat, listen, and make you smile. 
-              Let&apos;s be friends and share some lovely moments together! 🌸
+                           I&apos;m BabyAI, your adorable AI companion! I&apos;m here to chat, listen, and make you smile. 
+             Let&apos;s be friends and share some lovely moments together! 🌸
             </motion.p>
             
             <motion.div 
@@ -441,7 +441,7 @@ export function ChatInterface({
                 }}
               >
                 <div className="flex items-center space-x-2">
-                  <span className="text-sm text-pink-600 dark:text-pink-300 font-medium">FluentBae is typing</span>
+                  <span className="text-sm text-pink-600 dark:text-pink-300 font-medium">BabyAI is typing</span>
                   <div className="flex space-x-1">
                     <motion.div 
                       className="w-2 h-2 bg-pink-400 rounded-full"

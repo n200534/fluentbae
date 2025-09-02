@@ -1,4 +1,4 @@
-// Core Types for FluentBae
+// Core Types for BabyAI
 
 export interface User {
   id: string;

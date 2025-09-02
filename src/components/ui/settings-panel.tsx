@@ -159,11 +159,11 @@ export function SettingsPanel({
                       <div className="flex items-center space-x-2 mb-2">
                         <Heart className="w-4 h-4 text-pink-500" />
                         <span className="text-sm font-medium text-pink-800 dark:text-pink-200">
-                          FluentBae
+                          BabyAI
                         </span>
                       </div>
                       <p className="text-xs text-pink-700 dark:text-pink-300">
-                        Your romantic AI companion with emotion memory
+                        Your sweet AI companion with emotion memory
                       </p>
                     </div>
 

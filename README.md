@@ -1,8 +1,8 @@
-# FluentBae 💕
+# BabyAI 💕
 
-**Your Romantic AI Chat Partner with Emotion Memory**
+**Your Sweet AI Chat Partner with Emotion Memory**
 
-FluentBae is an intelligent AI companion that remembers everything about you, tracks your emotions, and builds genuine emotional connections. It's designed to be a non-cringe romantic AI that learns your preferences, remembers your conversations, and helps you with gift reminders.
+BabyAI is an intelligent AI companion that remembers everything about you, tracks your emotions, and builds genuine emotional connections. It's designed to be a sweet and caring AI that learns your preferences, remembers your conversations, and helps you with gift reminders.
 
 ## ✨ Features
 
@@ -78,7 +78,7 @@ redis-server
 npm run dev
 ```
 
-Visit `http://localhost:3000` to start chatting with FluentBae!
+Visit `http://localhost:3000` to start chatting with BabyAI!
 
 ### 4. Docker Deployment
 
@@ -87,7 +87,7 @@ Visit `http://localhost:3000` to start chatting with FluentBae!
 docker-compose up -d
 
 # View logs
-docker-compose logs -f fluentbae
+docker-compose logs -f babyai
 
 # Stop services
 docker-compose down

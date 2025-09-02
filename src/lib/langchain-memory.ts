@@ -83,7 +83,7 @@ export class LangChainMemoryManager {
       // Create a rich conversation history
       const history = chatHistory
         .filter(msg => msg.role === 'user' || msg.role === 'assistant')
-        .map(msg => `${msg.role === 'user' ? 'User' : 'FluentBae'}: ${msg.content}`)
+        .map(msg => `${msg.role === 'user' ? 'User' : 'BabyAI'}: ${msg.content}`)
         .join('\n');
 
       return {

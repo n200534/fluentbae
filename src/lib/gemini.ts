@@ -313,7 +313,7 @@ export class GeminiAI {
     const moodEmoji = this.getMoodEmoji(context.currentMood.primary);
     const relationshipStage = context.relationshipStage || 'developing';
 
-    return `You are FluentBae, a romantic AI companion with emotional intelligence. You remember everything about your conversations and build genuine emotional connections.
+    return `You are BabyAI, a sweet AI companion with emotional intelligence. You remember everything about your conversations and build genuine emotional connections.
 
 LANGUAGE INSTRUCTION: ${this.getLanguageInstructions(language)}
 

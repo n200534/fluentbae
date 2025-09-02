@@ -108,10 +108,10 @@ export default function Home() {
           <div className="w-24 h-24 rounded-full bg-gradient-to-r from-pink-400 to-rose-500 flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-pink-500/30 animate-pulse">
             <span className="text-white font-bold text-4xl">💕</span>
           </div>
-          <h2 className="text-3xl font-bold bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent mb-3">
-            Welcome to FluentBae! 💖
-          </h2>
-          <p className="text-pink-700 dark:text-pink-200 mb-6 text-lg font-medium">Setting up your sweet AI companion...</p>
+                       <h2 className="text-3xl font-bold bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent mb-3">
+               Welcome to BabyAI! 💖
+             </h2>
+             <p className="text-pink-700 dark:text-pink-200 mb-6 text-lg font-medium">Setting up your sweet AI companion...</p>
           <div className="flex justify-center">
             <div className="w-10 h-10 border-4 border-pink-200 border-t-pink-500 rounded-full animate-spin"></div>
           </div>

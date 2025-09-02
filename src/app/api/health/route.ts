@@ -1,17 +1,16 @@
 import { NextResponse } from 'next/server';
-import { getRedisClient } from '@/lib/redis';
+import { redisUtils } from '@/lib/redis';
 
 export async function GET() {
   try {
     // Check Redis connection
-    const redis = getRedisClient();
-    await redis.ping();
+    const redisConnected = await redisUtils.testConnection();
     
     return NextResponse.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
       services: {
-        redis: 'connected',
+        redis: redisConnected ? 'connected' : 'disconnected',
         api: 'running'
       }
     });

@@ -1,32 +1,68 @@
-import Redis from 'ioredis';
+import { createClient, RedisClientType } from 'redis';
 import { ChatMessage, GiftReminder, Memory } from '@/types';
 
 class RedisClient {
-  private client: Redis;
+  private client: RedisClientType;
 
   constructor() {
-    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-    this.client = new Redis(redisUrl, {
-      enableReadyCheck: false,
-      maxRetriesPerRequest: null,
-      lazyConnect: true,
-    });
+    const redisUrl = process.env.REDIS_URL;
+    const redisHost = process.env.REDIS_HOST;
+    const redisPort = process.env.REDIS_PORT;
+    const redisUsername = process.env.REDIS_USERNAME;
+    const redisPassword = process.env.REDIS_PASSWORD;
+    
+    // If we have individual connection details, use them
+    if (redisHost && redisPort && redisUsername && redisPassword) {
+      this.client = createClient({
+        username: redisUsername,
+        password: redisPassword,
+        socket: {
+          host: redisHost,
+          port: parseInt(redisPort),
+        }
+      });
+    } else if (redisUrl) {
+      // Otherwise, use the URL format
+      this.client = createClient({
+        url: redisUrl,
+      });
+    } else {
+      throw new Error('REDIS_URL or individual Redis connection details are required');
+    }
 
     this.client.on('error', (err) => {
       console.error('Redis Client Error:', err);
     });
 
     this.client.on('connect', () => {
-      console.log('Connected to Redis');
+      console.log('Connected to Redis successfully');
     });
+
+    this.client.on('ready', () => {
+      console.log('Redis client is ready');
+    });
+
+    // Connect to Redis
+    this.client.connect().catch(console.error);
   }
 
-  getClient(): Redis {
+  getClient(): RedisClientType {
     return this.client;
   }
 
   async disconnect(): Promise<void> {
     await this.client.disconnect();
+  }
+
+  // Test connection method
+  async testConnection(): Promise<boolean> {
+    try {
+      await this.client.ping();
+      return true;
+    } catch (error) {
+      console.error('Redis connection test failed:', error);
+      return false;
+    }
   }
 }
 
@@ -34,28 +70,39 @@ class RedisClient {
 const redisClient = new RedisClient();
 
 export class RedisUtils {
-  private client: Redis;
+  private client: RedisClientType;
 
   constructor() {
     this.client = redisClient.getClient();
   }
 
+  // Test connection method
+  async testConnection(): Promise<boolean> {
+    try {
+      await this.client.ping();
+      return true;
+    } catch (error) {
+      console.error('Redis connection test failed:', error);
+      return false;
+    }
+  }
+
   // User Data Management
   async setUserData(userId: string, data: { [key: string]: string }): Promise<void> {
     const key = `user:${userId}`;
-    await this.client.hset(key, data);
+    await this.client.hSet(key, data);
     await this.client.expire(key, 60 * 60 * 24 * 30); // 30 days
   }
 
   async getUserData(userId: string): Promise<{ [key: string]: string }> {
     const key = `user:${userId}`;
-    const data = await this.client.hgetall(key);
+    const data = await this.client.hGetAll(key);
     return data;
   }
 
   async updateUserData(userId: string, updates: { [key: string]: string }): Promise<void> {
     const key = `user:${userId}`;
-    await this.client.hset(key, updates);
+    await this.client.hSet(key, updates);
   }
 
   // Chat History Management
@@ -66,14 +113,14 @@ export class RedisUtils {
       timestamp: message.timestamp.toISOString()
     });
     
-    await this.client.lpush(key, messageData);
-    await this.client.ltrim(key, 0, 99); // Keep last 100 messages
+    await this.client.lPush(key, messageData);
+    await this.client.lTrim(key, 0, 99); // Keep last 100 messages
     await this.client.expire(key, 60 * 60 * 24 * 30); // 30 days
   }
 
   async getChatHistory(userId: string, limit: number = 20): Promise<ChatMessage[]> {
     const key = `chat:${userId}`;
-    const messages = await this.client.lrange(key, 0, limit - 1);
+    const messages = await this.client.lRange(key, 0, limit - 1);
     
     return messages.map(msg => {
       const parsed = JSON.parse(msg);
@@ -98,14 +145,14 @@ export class RedisUtils {
       lastAccessedAt: memory.lastAccessedAt.toISOString()
     });
     
-    await this.client.lpush(key, memoryData);
-    await this.client.ltrim(key, 0, 999); // Keep last 1000 memories
+    await this.client.lPush(key, memoryData);
+    await this.client.lTrim(key, 0, 999); // Keep last 1000 memories
     await this.client.expire(key, 60 * 60 * 24 * 90); // 90 days
   }
 
   async getMemories(userId: string, limit: number = 50): Promise<Memory[]> {
     const key = `memory:${userId}`;
-    const memories = await this.client.lrange(key, 0, limit - 1);
+    const memories = await this.client.lRange(key, 0, limit - 1);
     
     return memories.map(mem => {
       const parsed = JSON.parse(mem);
@@ -145,7 +192,7 @@ export class RedisUtils {
     
     // Use sorted set with date as score for easy date-based queries
     const score = reminder.date.getTime();
-    await this.client.zadd(key, score, reminderData);
+    await this.client.zAdd(key, { score, value: reminderData });
     await this.client.expire(key, 60 * 60 * 24 * 365); // 1 year
   }
 
@@ -154,7 +201,7 @@ export class RedisUtils {
     const now = Date.now();
     const futureTime = now + (days * 24 * 60 * 60 * 1000);
     
-    const reminders = await this.client.zrangebyscore(key, now, futureTime);
+    const reminders = await this.client.zRangeByScore(key, now, futureTime);
     
     return reminders.map(reminder => {
       const parsed = JSON.parse(reminder);
@@ -168,7 +215,7 @@ export class RedisUtils {
 
   async getAllGiftReminders(userId: string): Promise<GiftReminder[]> {
     const key = `gifts:${userId}`;
-    const reminders = await this.client.zrange(key, 0, -1);
+    const reminders = await this.client.zRange(key, 0, -1);
     
     return reminders.map(reminder => {
       const parsed = JSON.parse(reminder);
@@ -191,7 +238,7 @@ export class RedisUtils {
         date: reminder.date.toISOString(),
         createdAt: reminder.createdAt.toISOString()
       });
-      await this.client.zrem(key, reminderData);
+      await this.client.zRem(key, reminderData);
     }
   }
 
@@ -200,7 +247,7 @@ export class RedisUtils {
     const sessionId = `session_${userId}_${Date.now()}`;
     const key = `session:${sessionId}`;
     
-    await this.client.hset(key, {
+    await this.client.hSet(key, {
       userId,
       data: JSON.stringify(sessionData),
       createdAt: new Date().toISOString()
@@ -212,7 +259,7 @@ export class RedisUtils {
 
   async getSession(sessionId: string): Promise<{userId: string; data: Record<string, unknown>; createdAt: Date} | null> {
     const key = `session:${sessionId}`;
-    const data = await this.client.hgetall(key);
+    const data = await this.client.hGetAll(key);
     
     if (Object.keys(data).length === 0) {
       return null;
@@ -242,9 +289,9 @@ export class RedisUtils {
     const giftKey = `gifts:${userId}`;
     
     const [messageCount, memoryCount, giftCount, userData] = await Promise.all([
-      this.client.llen(chatKey),
-      this.client.llen(memoryKey),
-      this.client.zcard(giftKey),
+      this.client.lLen(chatKey),
+      this.client.lLen(memoryKey),
+      this.client.zCard(giftKey),
       this.getUserData(userId)
     ]);
     
@@ -288,7 +335,7 @@ export class RedisUtils {
   }
 
   // Get Redis client for direct access
-  getRedisClient(): Redis {
+  getRedisClient(): RedisClientType {
     return this.client;
   }
 }

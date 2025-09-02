@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FluentBae - Your Romantic AI Companion",
+  title: "BabyAI - Your Sweet AI Companion",
   description: "A romantic AI chat partner with emotion memory that remembers you and builds genuine emotional connections.",
 };
 

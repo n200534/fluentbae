@@ -232,7 +232,7 @@ export class GiftReminderManager {
       }
       
       // Update reminder in Redis
-      await redisUtils.getRedisClient().zrem(`gifts:${this.userId}`, JSON.stringify(reminder));
+      await redisUtils.getRedisClient().zRem(`gifts:${this.userId}`, JSON.stringify(reminder));
       await redisUtils.addGiftReminder(this.userId, reminder);
     }
   }

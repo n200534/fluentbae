@@ -23,7 +23,7 @@ export class EmotionTracker {
 
     // Get today's mood tracking
     const today = new Date().toISOString().split('T')[0];
-    const todayMood = await redisUtils.getRedisClient().hgetall(`mood:${this.userId}:${today}`);
+    const todayMood = await redisUtils.getRedisClient().hGetAll(`mood:${this.userId}:${today}`);
 
     let moodTracking: MoodTracking;
     
@@ -58,7 +58,7 @@ export class EmotionTracker {
     }
 
     // Save updated mood tracking
-    await redisUtils.getRedisClient().hset(`mood:${this.userId}:${today}`, {
+    await redisUtils.getRedisClient().hSet(`mood:${this.userId}:${today}`, {
       date: moodTracking.date.toISOString(),
       overallMood: JSON.stringify(moodTracking.overallMood),
       moodHistory: JSON.stringify(moodTracking.moodHistory),
@@ -127,7 +127,7 @@ export class EmotionTracker {
       const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
       const dateStr = date.toISOString().split('T')[0];
       
-      const dayMood = await redisUtils.getRedisClient().hgetall(`mood:${this.userId}:${dateStr}`);
+      const dayMood = await redisUtils.getRedisClient().hGetAll(`mood:${this.userId}:${dateStr}`);
       
       if (Object.keys(dayMood).length > 0) {
         moodHistory.push({
@@ -256,7 +256,7 @@ export class EmotionTracker {
   // Add mood note
   async addMoodNote(note: string): Promise<void> {
     const today = new Date().toISOString().split('T')[0];
-    await redisUtils.getRedisClient().hset(`mood:${this.userId}:${today}`, 'notes', note);
+    await redisUtils.getRedisClient().hSet(`mood:${this.userId}:${today}`, 'notes', note);
   }
 
   // Get current mood
