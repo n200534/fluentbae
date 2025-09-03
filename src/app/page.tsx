@@ -101,21 +101,23 @@ export default function Home() {
     }
   };
 
-  if (!user) {
+    if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 via-rose-50 to-orange-50 dark:from-purple-900 dark:via-pink-900 dark:to-rose-900">
-        <div className="text-center">
-          <div className="w-24 h-24 rounded-full bg-gradient-to-r from-pink-400 to-rose-500 flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-pink-500/30 animate-pulse">
-            <span className="text-white font-bold text-4xl">💕</span>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 via-rose-50 to-orange-50 dark:from-purple-900 dark:via-pink-900 dark:to-rose-900 p-4">
+        <div className="text-center max-w-sm w-full">
+          <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-gradient-to-r from-pink-400 to-rose-500 flex items-center justify-center mx-auto mb-6 sm:mb-8 shadow-2xl shadow-pink-500/30 animate-pulse">
+            <span className="text-white font-bold text-2xl sm:text-4xl">💕</span>
           </div>
-                       <h2 className="text-3xl font-bold bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent mb-3">
-               Welcome to BabyAI! 💖
-             </h2>
-             <p className="text-pink-700 dark:text-pink-200 mb-6 text-lg font-medium">Setting up your sweet AI companion...</p>
-          <div className="flex justify-center">
-            <div className="w-10 h-10 border-4 border-pink-200 border-t-pink-500 rounded-full animate-spin"></div>
+          <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent mb-2 sm:mb-3">
+            Welcome to BabyAI! 💖
+          </h2>
+          <p className="text-pink-700 dark:text-pink-200 mb-4 sm:mb-6 text-sm sm:text-lg font-medium">
+            Setting up your sweet AI companion...
+          </p>
+          <div className="flex justify-center mb-3 sm:mb-4">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-pink-200 border-t-pink-500 rounded-full animate-spin"></div>
           </div>
-          <p className="text-pink-500 dark:text-pink-300 mt-4 text-sm">Almost ready to chat! ✨</p>
+          <p className="text-pink-500 dark:text-pink-300 text-xs sm:text-sm">Almost ready to chat! ✨</p>
         </div>
       </div>
     );
